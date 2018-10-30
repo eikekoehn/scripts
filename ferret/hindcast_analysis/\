@@ -1,0 +1,7 @@
+use "/net/kryo/work2/fana/hindcast_bec/hindcast/output/avg/avg_1979.nc"
+
+sha/pal=terrestrial H,LON_RHO,LAT_RHO
+contour/ov/LEV=0 H,LON_RHO,LAT_RHO
+
+
+

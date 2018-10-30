@@ -1,0 +1,102 @@
+!!! this script is used to take ROMS hindcast_bec model data and compare it to WOA2013 data
+!!! author: Eike Koehn
+!!! date: 21. Sep 2018
+
+DEFINE SYMBOL res = 0.25
+!! CHOOSE DEPTH LEVEL TO LOOK AT !!
+DEFINE SYMBOL plot_depth_index = 2
+
+!! first of all, we load the WOA 2013 data file
+IF `($res) EQ 0.25` THEN
+ use "/net/kryo/work/updata/woa2013/temperature/decav/0.25/woa13_decav_t00_04.nc"
+ELIF `($res) EQ 1` THEN
+ use "/net/kryo/work/updata/woa2013/temperature/decav/1.00/woa13_decav_t00_01.nc"
+ELIF `($res) EQ 5` THEN
+ use "/net/kryo/work/updata/woa2013/temperature/decav/5.00/woa13_decav_t00_5d.nc"
+ENDIF
+
+!! create grid, that the model data will be interpolated onto
+IF `($res) EQ 0.25` THEN
+ go "make_grid_scripts/make_grid_025.jnl"
+ELIF `($res) EQ 1` THEN
+ go "make_grid_scripts/make_grid_1.jnl"
+ELIF `($res) EQ 5` THEN
+ go "make_grid_scripts/make_grid_5.jnl"
+ENDIF
+
+!! load the model data (EXAMPLE FILE)
+use "/net/kryo/work2/fana/hindcast_bec/hindcast/output/avg/avg_1979.nc"
+let temp_mn = TEMP[d=2,T=@AVE]
+let z_rho0_mn = z_rho0[d=2,T=@AVE]
+
+!!!!!!!!!!!! REGRIDDING OF CURVILINEAR, SIGMA COORDINATE MODEL DATA ONTO RECTANGULAR, Z COORDINATE SYSTEM OF WOA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+DEFINE SYMBOL map_file_already_exists = 1
+IF ($map_file_already_exists) THEN
+ !! load regridded map file (*.nc file) to avoid calculation steps before
+ IF `($res) EQ 0.25` THEN
+  use "/home/koehne/Documents/scripts/ferret/hindcast_analysis/map_files/map_file_025.nc"
+ ELIF `($res) EQ 1` THEN
+  use "/home/koehne/Documents/scripts/ferret/hindcast_analysis/map_files/map_file_1.nc"
+ ELIF `($res) EQ 5` THEN
+  use "/home/koehne/Documents/scripts/ferret/hindcast_analysis/map_files/map_file_5.nc"
+ ENDIF
+ !! NEED TO CONVERT SIGMA MODEL COORDINATES INTO DEPTH COORDINATES CORRESPONDING TO WOA DATA !!
+ let temp_z = ZAXREPLACE(temp_mn,z_rho0_mn*(-1),z[gz=zax])
+ !! regrid model temperature data onto WOA grid
+ let temp_regridded = curv_to_rect(temp_z,map[d=3])
+ELSE
+ let lonin = lon_rho[d=2] ! source grid longitudes
+ let latin = lat_rho[d=2] ! source grid latitudes 
+ !! regrid the model grid to the WOA grid using the curv_to_rect_map function, takes long!
+ !!  the last argument to curv_to_rect_map is a radius (deg) for interpolation of source points which should be increased if regridding low resolution data 
+ let map = curv_to_rect_map ( lonin,latin,lonlatout,2) 
+ !! save the regridded map to an *.nc file
+ IF `($res) EQ 0.25` THEN
+  save/clobber/file="map_files/map_file_025.nc" map ! save map to an nc file
+ ELIF `($res) EQ 1` THEN
+  save/clobber/file="map_files/map_file_1.nc" map ! save map to an nc file
+ ELIF `($res) EQ 5` THEN
+  save/clobber/file="map_files/map_file_5.nc" map ! save map to an nc file
+ ENDIF
+ !! NEED TO CONVERT SIGMA MODEL COORDINATES INTO DEPTH COORDINATES CORRESPONDING TO WOA DATA !!
+ let temp_z = ZAXREPLACE(temp_mn,z_rho0_mn*(-1),z[gz=zax])
+ !! regrid model temperature data onto WOA grid
+ let temp_regridded = curv_to_rect(temp_z,map)
+ENDIF
+
+!! save regridded temperature
+!save/file=temp_on_rect.nc temp_regridded
+
+!! CHOOSE DEPTH LEVEL TO LOOK AT !!
+!DEFINE SYMBOL plot_depth_index = 2
+
+!! PLOT REGRIDDED MODEL DATA !!
+DEFINE SYMBOL min_cval = 10
+DEFINE SYMBOL max_cval = 30
+
+!se wi/new 
+set viewport UL
+sha/pal=rainbow/title="Regridded Model Temp."/LEVELS=(-inf)(($min_cval),($max_cval),1)(inf) temp_regridded[K=($plot_depth_index)]
+go land_detail black
+
+!! PLOT WOA2013 DATA !! 
+set viewport UR
+IF `($res) EQ 0.25` THEN
+ sha/pal=rainbow/X=100.875W:69.875W/Y=40.875S:10.875N/title="WOA Temp."/LEVELS=(-inf)(($min_cval),($max_cval),1)(inf) T_AN[d=1,K=($plot_depth_index)]
+ELIF `($res) EQ 1` THEN
+ sha/pal=rainbow/X=100.5W:70.5W/Y=40.5S:10.5N/title="WOA Temp."/LEVELS=(-inf)(($min_cval),($max_cval),1)(inf) T_AN[d=1,K=($plot_depth_index)]
+ELIF `($res) EQ 5` THEN
+ sha/pal=rainbow/X=105W:65W/Y=45S:15N/title="WOA Temp."/LEVELS=(-inf)(($min_cval),($max_cval),1)(inf) T_MN[d=1,K=($plot_depth_index)]
+ENDIF
+go land_detail black
+
+!! COMPARE MODEL DATA TO WOA2013 DATA !!
+set viewport LL
+IF `($res) EQ 0.25` THEN
+ sha/X=100.875W:69.875W/Y=40.875S:10.875N/pal=no_green_centered/LEVELS=(-Inf)(-2,2,.2)(Inf)/title="Difference Model-WOA" temp_regridded[X=100.875W:69.875W,Y=40.875S:10.875N,K=($plot_depth_index),L=1]-T_AN[d=1,X=100.875W:69.875W,Y=40.875S:10.875N,K=($plot_depth_index)]
+ELIF `($res) EQ 1` THEN
+ sha/X=100.5W:70.5W/Y=40.5S:10.5N/pal=no_green_centered/LEVELS=(-Inf)(-2,2,.2)(Inf)/title="Difference Model-WOA" temp_regridded[X=100.5W:70.5W:1,Y=40.5S:10.5N:1,K=($plot_depth_index),L=1]-T_AN[d=1,X=100.5W:70.5W:1,Y=40.5S:10.5N:1,K=($plot_depth_index),L=1]
+ELIF `($res) EQ 5` THEN
+sha/pal=no_green_centered/LEVELS=(-Inf)(-2,2,.2)(Inf)/title="Difference Model-WOA" temp_regridded[X=105W:65W,Y=45S:15N,K=($plot_depth_index),L=1]-T_MN[d=1,X=105W:65W,Y=45S:15N,K=($plot_depth_index)]
+ENDIF
+go land_detail black

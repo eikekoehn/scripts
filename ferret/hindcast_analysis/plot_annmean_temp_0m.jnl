@@ -1,0 +1,53 @@
+use "/net/kryo/work2/fana/hindcast_bec/hindcast/output/avg/avg_1979.nc"
+
+
+!! PLOTTING THE CURVILINEAR MODEL DATA !!
+DEFINE SYMBOL jstt_idx = 1
+DEFINE SYMBOL jend_idx = 300
+DEFINE SYMBOL istt_idx = 20
+DEFINE SYMBOL iend_idx = 700
+
+!sha/pal=rainbow SALT[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx),K=41,L=1],LON_RHO[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx)],LAT_RHO[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx)]
+!go land_detail black
+
+!se wi/new
+!sha/pal=rainbow TEMP[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx),K=41,L=1],LON_RHO[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx)],LAT_RHO[d=1,I=($istt_idx):($iend_idx),J=($jstt_idx):($jend_idx)]
+!go land_detail black
+
+!! REGRIDDING CURVILINEAR MODEL DATA ONTO WOA2013 GRID !!
+! grid of WOA13: 89.5S:89.5N,179.5W:179.5E (for 1 deg resolution)
+!
+!set memory/size=512
+!define axis/x=100.5W:70.5W:1/units=degrees xax ! specify new grid
+!define axis/y=40.5S:10.5N:1/units=degrees yax
+!let lonlatout = y[gy=yax] + x[gx=xax] ! define new lat lon grid\
+
+go make_grid.jnl
+
+let lonin = lon_rho[d=1] ! source grid longitudes
+let latin = lat_rho[d=1] ! source grid latitudes
+!regrid, the last argument to curv_to_rect_map is a 
+!radius (deg) for interpolation of source points which
+!should be increased if regridding low resolution data
+!let map = curv_to_rect_map ( lonin,latin,lonlatout,2) 
+!save/clobber/file=map_file.nc map ! save map to an nc file
+
+use "/home/koehne/Documents/scripts/ferret/hindcast_analysis/map_file.nc"
+let/title="regridded temp" temp_regridded = curv_to_rect(TEMP[d=1],map[d=2])
+!save/file=var_on_rect.nc var_regridded
+
+!! PLOT REGRIDDED MODEL DATA !!
+!se wi/new 
+sha/pal=rainbow temp_regridded[K=41,L=1]
+go land_detail black
+
+!! PLOT WOA2013 DATA !! 
+use "/net/kryo/work/updata/woa2013/temperature/decav/1.00/woa13_decav_t00_01.nc"
+se wi/new
+sha/pal=rainbow/X=100.5W:70.5W/Y=40.5S:10.5N T_AN[d=3,K=1]
+go land_detail black
+
+!! COMPARE MODEL DATA TO WOA2013 DATA !!
+se wi/new
+sha/pal=rainbow/X=100.5W:70.5W/Y=40.5S:10.5N/pal=no_green_centered/LEVELS=(-Inf)(-5,5,.5)(Inf) T_AN[d=3,K=1]-temp_regridded[K=41,L=1]
+go land_detail black
